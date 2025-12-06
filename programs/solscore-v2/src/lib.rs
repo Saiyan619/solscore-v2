@@ -8,7 +8,7 @@ pub use error::*;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("D9xDTh7SMGKK2yQZABhQbNqQu9SoEpvpdEFUtkKe6A6u");
+declare_id!("HRTMA5HJ2e27y9t5kttAha2vAKnEYjZ88Gvt8FryP6G6");
 
 #[program]
 pub mod solscore {

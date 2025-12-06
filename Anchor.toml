@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-solscore_v2 = "D9xDTh7SMGKK2yQZABhQbNqQu9SoEpvpdEFUtkKe6A6u"
+solscore_v2 = "HRTMA5HJ2e27y9t5kttAha2vAKnEYjZ88Gvt8FryP6G6"
 
 [registry]
 url = "https://api.apr.dev"

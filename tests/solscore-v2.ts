@@ -27,18 +27,11 @@ describe("solscore", () => {
   let mint: PublicKey;
   let admin: Keypair;
   let adminTokenAccount: PublicKey;
-  
-  // Pre-funded test users (reused across tests)
-  let testUser1: Keypair;
-  let testUser1TokenAccount: PublicKey;
-  let testUser2: Keypair;
-  let testUser2TokenAccount: PublicKey;
 
   before(async () => {
-    // Use provider wallet as admin
+    // Use provider wallet instead of generating new admin
     admin = (provider.wallet as any).payer;
     
-    // Create mint
     mint = await createMint(
       provider.connection,
       admin,
@@ -47,7 +40,6 @@ describe("solscore", () => {
       6
     );
 
-    // Create admin token account
     adminTokenAccount = await createAccount(
       provider.connection,
       admin,
@@ -55,7 +47,6 @@ describe("solscore", () => {
       admin.publicKey
     );
 
-    // Mint tokens to admin
     await mintTo(
       provider.connection,
       admin,
@@ -64,69 +55,6 @@ describe("solscore", () => {
       admin,
       1_000_000_000_000
     );
-
-    // Create and fund test users ONCE for all tests
-    console.log("Setting up test users...");
-    
-    // Test User 1
-    testUser1 = Keypair.generate();
-    try {
-      const airdrop1 = await provider.connection.requestAirdrop(
-        testUser1.publicKey,
-        5 * LAMPORTS_PER_SOL
-      );
-      await provider.connection.confirmTransaction(airdrop1);
-      console.log("Test user 1 funded");
-    } catch (error) {
-      console.log("Airdrop for test user 1 failed, but continuing...");
-    }
-
-    testUser1TokenAccount = await createAccount(
-      provider.connection,
-      admin, // Admin pays for account creation
-      mint,
-      testUser1.publicKey
-    );
-
-    await mintTo(
-      provider.connection,
-      admin,
-      mint,
-      testUser1TokenAccount,
-      admin,
-      100_000_000
-    );
-
-    // Test User 2
-    testUser2 = Keypair.generate();
-    try {
-      const airdrop2 = await provider.connection.requestAirdrop(
-        testUser2.publicKey,
-        5 * LAMPORTS_PER_SOL
-      );
-      await provider.connection.confirmTransaction(airdrop2);
-      console.log("Test user 2 funded");
-    } catch (error) {
-      console.log("Airdrop for test user 2 failed, but continuing...");
-    }
-
-    testUser2TokenAccount = await createAccount(
-      provider.connection,
-      admin,
-      mint,
-      testUser2.publicKey
-    );
-
-    await mintTo(
-      provider.connection,
-      admin,
-      mint,
-      testUser2TokenAccount,
-      admin,
-      100_000_000
-    );
-
-    console.log("Test setup complete");
   });
 
   describe("initialize_market", () => {
@@ -272,6 +200,8 @@ describe("solscore", () => {
   describe("place_bet", () => {
     let marketPda: PublicKey;
     let vaultPda: PublicKey;
+    let user1: Keypair;
+    let user1TokenAccount: PublicKey;
 
     before(async () => {
       const leagueName = "NHL";
@@ -307,18 +237,41 @@ describe("solscore", () => {
         })
         .signers([admin])
         .rpc();
+
+      user1 = Keypair.generate();
+      const airdrop = await provider.connection.requestAirdrop(
+        user1.publicKey,
+        5 * LAMPORTS_PER_SOL
+      );
+      await provider.connection.confirmTransaction(airdrop);
+
+      user1TokenAccount = await createAccount(
+        provider.connection,
+        user1,
+        mint,
+        user1.publicKey
+      );
+
+      await mintTo(
+        provider.connection,
+        admin,
+        mint,
+        user1TokenAccount,
+        admin,
+        10_000_000
+      );
     });
 
     it("Successfully places a bet", async () => {
       const [betPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("bet"), testUser1.publicKey.toBuffer(), marketPda.toBuffer()],
+        [Buffer.from("bet"), user1.publicKey.toBuffer(), marketPda.toBuffer()],
         program.programId
       );
 
       const teamIndex = 0;
       const amount = new anchor.BN(500);
 
-      const userBalanceBefore = await getAccount(provider.connection, testUser1TokenAccount);
+      const userBalanceBefore = await getAccount(provider.connection, user1TokenAccount);
 
       await program.methods
         .placeBet(teamIndex, amount)
@@ -326,22 +279,22 @@ describe("solscore", () => {
           bet: betPda,
           market: marketPda,
           vault: vaultPda,
-          userTokenAccount: testUser1TokenAccount,
-          user: testUser1.publicKey,
+          userTokenAccount: user1TokenAccount,
+          user: user1.publicKey,
           mint: mint,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
-        .signers([testUser1])
+        .signers([user1])
         .rpc();
 
       const betAccount = await program.account.bet.fetch(betPda);
-      assert.equal(betAccount.user.toString(), testUser1.publicKey.toString());
+      assert.equal(betAccount.user.toString(), user1.publicKey.toString());
       assert.equal(betAccount.teamIndex, teamIndex);
       assert.equal(betAccount.amount.toNumber(), amount.toNumber());
 
-      const userBalanceAfter = await getAccount(provider.connection, testUser1TokenAccount);
+      const userBalanceAfter = await getAccount(provider.connection, user1TokenAccount);
       assert.equal(
         Number(userBalanceBefore.amount) - Number(userBalanceAfter.amount),
         amount.toNumber()
@@ -349,8 +302,31 @@ describe("solscore", () => {
     });
 
     it("Fails when betting zero amount", async () => {
+      const user2 = Keypair.generate();
+      const airdrop = await provider.connection.requestAirdrop(
+        user2.publicKey,
+        LAMPORTS_PER_SOL
+      );
+      await provider.connection.confirmTransaction(airdrop);
+
+      const user2TokenAccount = await createAccount(
+        provider.connection,
+        user2,
+        mint,
+        user2.publicKey
+      );
+
+      await mintTo(
+        provider.connection,
+        admin,
+        mint,
+        user2TokenAccount,
+        admin,
+        10_000_000
+      );
+
       const [betPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("bet"), testUser2.publicKey.toBuffer(), marketPda.toBuffer()],
+        [Buffer.from("bet"), user2.publicKey.toBuffer(), marketPda.toBuffer()],
         program.programId
       );
 
@@ -361,14 +337,14 @@ describe("solscore", () => {
             bet: betPda,
             market: marketPda,
             vault: vaultPda,
-            userTokenAccount: testUser2TokenAccount,
-            user: testUser2.publicKey,
+            userTokenAccount: user2TokenAccount,
+            user: user2.publicKey,
             mint: mint,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
-          .signers([testUser2])
+          .signers([user2])
           .rpc();
         
         assert.fail("Expected error");
@@ -378,25 +354,31 @@ describe("solscore", () => {
     });
 
     it("Fails with invalid team index", async () => {
-      // Create a new token account for admin to use in this test
-      const adminBetTokenAccount = await createAccount(
+      const user3 = Keypair.generate();
+      const airdrop = await provider.connection.requestAirdrop(
+        user3.publicKey,
+        LAMPORTS_PER_SOL
+      );
+      await provider.connection.confirmTransaction(airdrop);
+
+      const user3TokenAccount = await createAccount(
         provider.connection,
-        admin,
+        user3,
         mint,
-        admin.publicKey
+        user3.publicKey
       );
 
       await mintTo(
         provider.connection,
         admin,
         mint,
-        adminBetTokenAccount,
+        user3TokenAccount,
         admin,
         10_000_000
       );
 
       const [betPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("bet"), admin.publicKey.toBuffer(), marketPda.toBuffer()],
+        [Buffer.from("bet"), user3.publicKey.toBuffer(), marketPda.toBuffer()],
         program.programId
       );
 
@@ -407,14 +389,14 @@ describe("solscore", () => {
             bet: betPda,
             market: marketPda,
             vault: vaultPda,
-            userTokenAccount: adminBetTokenAccount,
-            user: admin.publicKey,
+            userTokenAccount: user3TokenAccount,
+            user: user3.publicKey,
             mint: mint,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
-          .signers([admin])
+          .signers([user3])
           .rpc();
         
         assert.fail("Expected error");
@@ -555,10 +537,58 @@ describe("solscore", () => {
     let vaultPda: PublicKey;
     let winnerBetPda: PublicKey;
     let loserBetPda: PublicKey;
+    const winner = Keypair.generate();
+    let winnerTokenAccount: PublicKey;
+    const loser = Keypair.generate();
+    let loserTokenAccount: PublicKey;
 
     before(async () => {
       const leagueName = "SerieA";
       const season = Date.now().toString();
+
+      const airdrop1 = await provider.connection.requestAirdrop(
+        winner.publicKey,
+        LAMPORTS_PER_SOL
+      );
+      await provider.connection.confirmTransaction(airdrop1);
+
+      const airdrop2 = await provider.connection.requestAirdrop(
+        loser.publicKey,
+        LAMPORTS_PER_SOL
+      );
+      await provider.connection.confirmTransaction(airdrop2);
+
+      winnerTokenAccount = await createAccount(
+        provider.connection,
+        winner,
+        mint,
+        winner.publicKey
+      );
+
+      loserTokenAccount = await createAccount(
+        provider.connection,
+        loser,
+        mint,
+        loser.publicKey
+      );
+
+      await mintTo(
+        provider.connection,
+        admin,
+        mint,
+        winnerTokenAccount,
+        admin,
+        10_000_000
+      );
+
+      await mintTo(
+        provider.connection,
+        admin,
+        mint,
+        loserTokenAccount,
+        admin,
+        10_000_000
+      );
 
       [marketPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("market"), Buffer.from(leagueName), Buffer.from(season)],
@@ -589,9 +619,8 @@ describe("solscore", () => {
         .signers([admin])
         .rpc();
 
-      // Winner bet (testUser1 bets on team 1)
       [winnerBetPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("bet"), testUser1.publicKey.toBuffer(), marketPda.toBuffer()],
+        [Buffer.from("bet"), winner.publicKey.toBuffer(), marketPda.toBuffer()],
         program.programId
       );
 
@@ -601,19 +630,18 @@ describe("solscore", () => {
           bet: winnerBetPda,
           market: marketPda,
           vault: vaultPda,
-          userTokenAccount: testUser1TokenAccount,
-          user: testUser1.publicKey,
+          userTokenAccount: winnerTokenAccount,
+          user: winner.publicKey,
           mint: mint,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
-        .signers([testUser1])
+        .signers([winner])
         .rpc();
 
-      // Loser bet (testUser2 bets on team 0)
       [loserBetPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("bet"), testUser2.publicKey.toBuffer(), marketPda.toBuffer()],
+        [Buffer.from("bet"), loser.publicKey.toBuffer(), marketPda.toBuffer()],
         program.programId
       );
 
@@ -623,17 +651,16 @@ describe("solscore", () => {
           bet: loserBetPda,
           market: marketPda,
           vault: vaultPda,
-          userTokenAccount: testUser2TokenAccount,
-          user: testUser2.publicKey,
+          userTokenAccount: loserTokenAccount,
+          user: loser.publicKey,
           mint: mint,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
-        .signers([testUser2])
+        .signers([loser])
         .rpc();
 
-      // Resolve market with team 1 winning
       await program.methods
         .resolveMarket(1)
         .accounts({
@@ -646,7 +673,7 @@ describe("solscore", () => {
     });
 
     it("Successfully claims payout for winning bet", async () => {
-      const winnerBalanceBefore = await getAccount(provider.connection, testUser1TokenAccount);
+      const winnerBalanceBefore = await getAccount(provider.connection, winnerTokenAccount);
 
       await program.methods
         .claimPayout()
@@ -654,17 +681,17 @@ describe("solscore", () => {
           market: marketPda,
           vault: vaultPda,
           bet: winnerBetPda,
-          userTokenAccount: testUser1TokenAccount,
-          user: testUser1.publicKey,
+          userTokenAccount: winnerTokenAccount,
+          user: winner.publicKey,
           mint: mint,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
-        .signers([testUser1])
+        .signers([winner])
         .rpc();
 
-      const winnerBalanceAfter = await getAccount(provider.connection, testUser1TokenAccount);
+      const winnerBalanceAfter = await getAccount(provider.connection, winnerTokenAccount);
       
       const expectedPayout = 500 * 3;
       assert.equal(
@@ -681,14 +708,14 @@ describe("solscore", () => {
             market: marketPda,
             vault: vaultPda,
             bet: loserBetPda,
-            userTokenAccount: testUser2TokenAccount,
-            user: testUser2.publicKey,
+            userTokenAccount: loserTokenAccount,
+            user: loser.publicKey,
             mint: mint,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
-          .signers([testUser2])
+          .signers([loser])
           .rpc();
         
         assert.fail("Expected error");
