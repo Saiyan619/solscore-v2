@@ -1,14 +1,14 @@
 # SolScore v2
 
-A decentralized sports betting platform built on Solana that enables transparent, trustless wagering on sports events with SPL token integration.
+A decentralized sports Prediction platform built on Solana that enables transparent, trustless wagering on sports events with SPL token integration.
 
 ## Overview
 
-SolScore is a smart contract-powered betting protocol that allows users to place bets on sports matches across multiple leagues. The platform uses Program Derived Addresses (PDAs) for secure fund management and automated payout distribution to winning bettors.
+SolScore is a smart contract-powered Prediction protocol that allows users to make predictions on football league winners across multiple leagues. The platform uses Program Derived Addresses (PDAs) for secure fund management and automated payout distribution to winning bettors.
 
 ## Features
 
-- **Multi-Sport Support**: Create betting markets for any league (NBA, NFL, NHL, EPL, etc.)
+- **Multi-Sport Support**: Create betting markets for any football league (EPL,Ligue 1, Laliga etc.)
 - **SPL Token Integration**: Place bets using any SPL token with customizable odds
 - **Automated Payouts**: Winners claim their payouts directly from the smart contract
 - **Transparent Resolution**: Market outcomes are resolved on-chain by authorized admins
