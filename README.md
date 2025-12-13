@@ -1,6 +1,7 @@
 # SolScore v2
 
 A decentralized sports Prediction platform built on Solana that enables transparent, trustless wagering on sports events with SPL token integration.
+Link to the frontend repo - https://github.com/Saiyan619/solscore-frontend
 
 ## Overview
 
